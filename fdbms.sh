@@ -49,11 +49,11 @@ function createDB {
   read -r dbName
 
   # Validate database name
-  if [[ ! "$dbName" =~ ^[[:alnum:]_]+$ ]]; then
-    echo "Invalid Database Name. Use only alphanumeric characters and underscores."
-    mainMenu
-    return
-  fi
+if [[ ! "$dbName" =~ ^[a-zA-Z_][a-zA-Z0-9_]*$ || "$dbName" =~ ^[0-9] ]]; then
+  echo "Invalid Database Name. Use only alphanumeric characters and underscores. It should not start with a number."
+  mainMenu
+  return
+fi
 
   dbPath="$DBMS_PATH/$dbName"
 
@@ -98,8 +98,9 @@ function tablesMenu {
   echo -e "\n+--------Tables Menu------------+"
   echo "| 1. Show Existing Tables       |"
   echo "| 2. Create New Table           |"
+  echo "| 3. Insert Into Table           |"
+  echo "| 4. deleteFromTable            |"              
   echo "| 7. Drop Table                 |"   
-  echo "| 3. Insert Into Table          |"
   echo "| 8. Back To Main Menu          |"
   echo "| 9. Exit                       |"
   echo "+-------------------------------+"
@@ -110,6 +111,7 @@ function tablesMenu {
     1) ls .; tablesMenu ;;
     2) createTable ;;
     3) insert ;;
+    4) deleteFromTable;;
     7)  dropTable;;
     8) clear; cd ../.. 2>> "$ERROR_LOG"; mainMenu ;;
     9) exit ;;
@@ -117,15 +119,73 @@ function tablesMenu {
   esac
 }
 
+function deleteFromTable {
+  echo -e "Enter Table Name: \c"
+  read tName
+
+  # Check if the table file exists
+  if [ ! -f "$tName" ]; then
+    echo "Table does not exist."
+    tablesMenu
+    return
+  fi
+
+  # Assuming primary key is 'id'
+  primaryKey="id"
+
+  echo -e "Enter Condition Value for $primaryKey: \c"
+  read val
+
+  # Check if the condition value is empty
+  if [ -z "$val" ]; then
+    echo "Condition value cannot be empty."
+    tablesMenu
+    return
+  fi
+
+  # Debugging: Print table contents before deletion
+  echo "Table Contents before deletion:"
+  cat "$tName"
+
+  # Debugging: Print primary key value being searched for
+  echo "Searching for $primaryKey=$val"
+
+  # Search for the row with the primary key value
+  row=$(awk -v pKey="$primaryKey" -v value="$val" -F "|" '$1 == value {print}' "$tName")
+
+  # Debugging: Print row content found
+  echo "Row Found: $row"
+
+  # If row not found
+  if [ -z "$row" ]; then
+    echo "Row with $primaryKey=$val not found."
+    tablesMenu
+    return
+  fi
+
+# Delete the row with the primary key value
+awk -v pKey="$primaryKey" -v value="$val" -F "|" '$1 != value' "$tName" > "$tName.tmp" && mv "$tName.tmp" "$tName"
+
+# Debugging: Print contents of the updated table file after deletion
+echo "Table Contents after deletion:"
+cat "$tName"
+
+
+  echo "Row Deleted Successfully"
+  tablesMenu
+}
+
+
 function createTable {
   echo -e "Table Name: "
   read -r tableName
 
   # Validate table name
-  if [[ ! "$tableName" =~ ^[[:alnum:]_]+$ ]]; then
-    echo "Invalid Table Name. Use only alphanumeric characters and underscores."
+ if [[ ! "$tableName" =~ ^[a-zA-Z_][a-zA-Z0-9_]*$ || "$tableName" =~ ^[[:space:]] ]]; then
+    echo "Invalid Table Name. Use only alphanumeric characters and underscores. It should not start with a number."
     tablesMenu
     return
+  
   fi
 
   # Convert to lowercase
@@ -167,7 +227,7 @@ function createTable {
                 break ;;
           no )  metaData+="$rSep$colName$sep$colType$sep"
                 break ;;
-          * )   echo "Wrong Choice" ;;
+          * )   echo "not valid option" ;;
         esac
       done
     else
@@ -260,10 +320,18 @@ function dropTable {
   then
     echo "Table Dropped Successfully"
   else
-    echo "Error Dropping Table $tName"
+    echo  "Error Dropping Table $tName"
   fi
   tablesMenu
 }
+
+
+
+
+
+
+
+
 # Start the script
 mainMenu
 
