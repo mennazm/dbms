@@ -98,11 +98,14 @@ function tablesMenu {
   echo -e "\n+--------Tables Menu------------+"
   echo "| 1. Show Existing Tables       |"
   echo "| 2. Create New Table           |"
-  echo "| 3. Insert Into Table           |"
-  echo "| 4. deleteFromTable            |"              
-  echo "| 7. Drop Table                 |"   
-  echo "| 8. Back To Main Menu          |"
-  echo "| 9. Exit                       |"
+  echo "| 3. Insert Into Table          |"
+  echo "| 4. deleteFromTable            |"
+  echo "| 5. selectAllFromTable         |"
+  echo "| 6. selectDataFromTable        |"
+  echo "| 7. updateTable                |"
+  echo "| 8. Drop Table                 |"   
+  echo "| 9. Back To Main Menu          |"
+  echo "|10. Exit                       |"
   echo "+-------------------------------+"
   echo -e "Enter Choice: \c"
   read -r choice
@@ -112,9 +115,12 @@ function tablesMenu {
     2) createTable ;;
     3) insert ;;
     4) deleteFromTable;;
-    7)  dropTable;;
-    8) clear; cd ../.. 2>> "$ERROR_LOG"; mainMenu ;;
-    9) exit ;;
+    5) selectAllFromTable ;;
+    6) selectDataFromTable ;;
+    7) updateTable ;; 
+    8) dropTable;;
+    9) clear; cd ../.. 2>> "$ERROR_LOG"; mainMenu ;;
+    10) exit ;;
     *) echo "Invalid Choice"; tablesMenu ;;
   esac
 }
@@ -122,57 +128,32 @@ function tablesMenu {
 function deleteFromTable {
   echo -e "Enter Table Name: \c"
   read tName
-
-  # Check if the table file exists
-  if [ ! -f "$tName" ]; then
-    echo "Table does not exist."
+  if [[ ! -f "$tName" ]]; then
+    echo "Table $tName does not exist"
     tablesMenu
     return
   fi
-
-  # Assuming primary key is 'id'
-  primaryKey="id"
-
-  echo -e "Enter Condition Value for $primaryKey: \c"
-  read val
-
-  # Check if the condition value is empty
-  if [ -z "$val" ]; then
-    echo "Condition value cannot be empty."
+  echo -e "Enter Unique Value Column name: \c"
+  read uniqueField
+  echo -e "Enter Unique Value: \c"
+  read uniqueValue
+  fid=$(awk 'BEGIN{FS="|"}{if(NR==1){for(i=1;i<=NF;i++){if($i=="'$uniqueField'") print i}}}' $tName)
+  if [[ $fid == "" ]]
+  then
+    echo "Column '$uniqueField' Not Found"
     tablesMenu
-    return
+  else
+    res=$(awk -v fid="$fid" -v val="$uniqueValue" 'BEGIN{FS="|"} $fid == val {print NR}' $tName 2>>./.error.log)
+    if [[ $res == "" ]]
+    then
+      echo "Value Not Found"
+      tablesMenu
+    else
+      sed -i -e "${res}d" -e '/^ *$/d' $tName 2>>./.error.log
+      echo "Row with unique value '$uniqueValue' Deleted Successfully"
+      tablesMenu
+    fi
   fi
-
-  # Debugging: Print table contents before deletion
-  echo "Table Contents before deletion:"
-  cat "$tName"
-
-  # Debugging: Print primary key value being searched for
-  echo "Searching for $primaryKey=$val"
-
-  # Search for the row with the primary key value
-  row=$(awk -v pKey="$primaryKey" -v value="$val" -F "|" '$1 == value {print}' "$tName")
-
-  # Debugging: Print row content found
-  echo "Row Found: $row"
-
-  # If row not found
-  if [ -z "$row" ]; then
-    echo "Row with $primaryKey=$val not found."
-    tablesMenu
-    return
-  fi
-
-# Delete the row with the primary key value
-awk -v pKey="$primaryKey" -v value="$val" -F "|" '$1 != value' "$tName" > "$tName.tmp" && mv "$tName.tmp" "$tName"
-
-# Debugging: Print contents of the updated table file after deletion
-echo "Table Contents after deletion:"
-cat "$tName"
-
-
-  echo "Row Deleted Successfully"
-  tablesMenu
 }
 
 
@@ -327,8 +308,163 @@ function dropTable {
 
 
 
+function selectAllFromTable {
+  echo -e "Enter Table Name: \c"
+  read tableName
 
+  # Check if the table exists
+  if [ ! -f "$tableName" ]; then
+    echo "Table $tableName does not exist."
+    tablesMenu
+    return
+  fi
 
+  # Print column names
+  awk 'NR==1' "$tableName"
+
+  # Print data
+  awk 'NR>1' "$tableName"
+
+  tablesMenu
+}
+
+function selectDataFromTable {
+  echo -e "Enter Table Name: \c"
+  read tableName
+
+  # Check if the table exists
+  if [ ! -f "$tableName" ]; then
+    echo "Table $tableName does not exist."
+    tablesMenu
+    return
+  fi
+
+  # Print column names
+  echo "Column names:"
+  header=$(awk 'NR==1' "$tableName")
+  echo "$header"
+
+  echo -e "Enter condition (in the format 'column_name=value'): \c"
+  read condition
+
+  # Extract column name and value from the condition
+  colName=$(echo "$condition" | awk -F "=" '{print $1}')
+  value=$(echo "$condition" | awk -F "=" '{print $2}')
+
+  echo "Condition: $condition"
+  echo "Column name: $colName"
+  echo "Value: $value"
+
+  # Check if the column exists in the table
+  if ! awk -F "|" -v colName="$colName" 'NR==1 {for (i=1; i<=NF; i++) if ($i == colName) exit 0; exit 1}' <<< "$header"; then
+    echo "Column $colName does not exist in the table."
+    tablesMenu
+    return
+  fi
+
+  # Print data matching the condition
+  matchingRows=$(awk -v colName="$colName" -v value="$value" -F "|" 'NR>1 {if (index($colName, value)) print $0}' "$tableName")
+
+  if [ -z "$matchingRows" ]; then
+    echo "No matching rows found."
+  else
+    echo "Matching rows:"
+    echo "$matchingRows"
+  fi
+
+  tablesMenu
+}
+
+function updateTable {
+  echo -e "Enter Table Name: \c"
+  read -r tableName
+  
+  # Check if the table file exists  
+  if [ ! -f "$tableName" ]; then
+    echo "Table does not exist."
+    tablesMenu
+    return
+  fi
+  
+  # Get the primary key column name (assuming it is the first column)
+  primaryKey=$(awk -F "|" 'NR==1 {print $1; exit}' "$tableName")
+  
+  # Prompt for the primary key value  
+  echo -e "Enter $primaryKey for the row to update: \c"
+  read -r primaryKeyValue
+  
+  # Check if the condition value is empty  
+  if [ -z "$primaryKeyValue" ]; then
+    echo "$primaryKey cannot be empty."
+    tablesMenu
+    return
+  fi
+  
+  # Check if the primary key value exists in the table
+  if ! grep -q "^$primaryKeyValue|" "$tableName"; then
+    echo "Row with $primaryKey=$primaryKeyValue not found."
+    tablesMenu
+    return
+  fi
+  
+  # Create a temporary file to store the updated table  
+  tmpfile=$(mktemp)
+  
+  # Loop to update columns
+  while true; do
+    # Prompt user to select the column to update
+    echo "Select the column to update:"
+    echo "1. ID"
+    echo "2. Name"
+    echo "3. Age"
+    read -r choice
+    
+    # Check the user's choice and set the column variable accordingly
+    case $choice in
+      1) column="ID";;
+      2) column="Name";;
+      3) column="Age";;
+      *) echo "Invalid choice"; tablesMenu; return;;
+    esac
+    
+    # Prompt for the new value for the selected column
+    echo -e "Enter new value for $column: \c"
+    read -r newValue
+    
+    # Update the table
+    awk -v pKey="$primaryKey" -v pKeyValue="$primaryKeyValue" -v col="$column" -v newVal="$newValue" -F "|" '
+      BEGIN { OFS = FS }
+      {
+        if ($1 == pKeyValue) {
+          if (col == "ID") {
+            $1 = newVal
+          } else if (col == "Name") {
+            $2 = newVal
+          } else if (col == "Age") {
+            $3 = newVal
+          }
+        }
+        print $0
+      }
+    ' "$tableName" > "$tmpfile" && mv "$tmpfile" "$tableName"
+    
+    # Ask user if they want to update more values
+    echo -e "Do you want to update more values in this row? (1: Yes, 2: No): \c"
+    read -r updateMore
+    
+    # If the user chooses not to update more values, exit the loop
+    if [ "$updateMore" = "2" ]; then
+      break
+    fi
+  done
+  
+  # Display the updated table  
+  echo "Updated Table:"
+  cat "$tableName"
+  echo "Row updated successfully."
+  
+  tablesMenu
+}
 
 
 
