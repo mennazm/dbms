@@ -125,6 +125,7 @@ function tablesMenu {
   esac
 }
 
+
 function deleteFromTable {
   echo -e "Enter Table Name: \c"
   read tName
@@ -133,28 +134,38 @@ function deleteFromTable {
     tablesMenu
     return
   fi
-  echo -e "Enter Unique Value Column name: \c"
-  read uniqueField
-  echo -e "Enter Unique Value: \c"
-  read uniqueValue
-  fid=$(awk 'BEGIN{FS="|"}{if(NR==1){for(i=1;i<=NF;i++){if($i=="'$uniqueField'") print i}}}' $tName)
-  if [[ $fid == "" ]]
-  then
-    echo "Column '$uniqueField' Not Found"
+  
+  # Prompt the user to enter the column name they consider as the identifier
+  echo -e "Enter Column Name for Identifying Rows: \c"
+  read identifierColumn
+
+  # Check if the provided column exists in the table
+  identifierColumnIndex=$(awk -F'|' -v col="$identifierColumn" 'NR==1 { for(i=1; i<=NF; i++) { if($i == col) { print i } } }' "$tName")
+  
+  if [[ -z "$identifierColumnIndex" ]]; then
+    echo "Column '$identifierColumn' not found in table $tName"
     tablesMenu
-  else
-    res=$(awk -v fid="$fid" -v val="$uniqueValue" 'BEGIN{FS="|"} $fid == val {print NR}' $tName 2>>./.error.log)
-    if [[ $res == "" ]]
-    then
-      echo "Value Not Found"
-      tablesMenu
-    else
-      sed -i -e "${res}d" -e '/^ *$/d' $tName 2>>./.error.log
-      echo "Row with unique value '$uniqueValue' Deleted Successfully"
-      tablesMenu
-    fi
+    return
   fi
+  
+  echo -e "Enter Value for $identifierColumn: \c"
+  read identifierValue
+
+  # Check if the provided value exists in the table
+  rowNumber=$(awk -F'|' -v idx="$identifierColumnIndex" -v val="$identifierValue" '$idx == val { print NR }' "$tName")
+  
+  if [[ -z "$rowNumber" ]]; then
+    echo "Row with $identifierColumn value '$identifierValue' not found in table $tName"
+    tablesMenu
+    return
+  fi
+  
+  # Delete the row with the provided value
+  sed -i -e "${rowNumber}d" -e '/^ *$/d' "$tName" 2>>./.error.log
+  echo "Row with $identifierColumn value '$identifierValue' Deleted Successfully from $tName"
+  tablesMenu
 }
+
 
 
 function createTable {
@@ -166,14 +177,19 @@ function createTable {
     echo "Invalid Table Name. Use only alphanumeric characters and underscores. It should not start with a number."
     tablesMenu
     return
-  
-  fi
+ fi
 
   # Convert to lowercase
   tableName=$(echo "$tableName" | tr '[:upper:]' '[:lower:]')
 
   if [ -f "$tableName" ]; then
     echo "Table already exists. Choose another name."
+    tablesMenu
+    return
+  fi
+
+  if [ -f ".$tableName" ]; then
+    echo "Table metadata already exists. Choose another name."
     tablesMenu
     return
   fi
@@ -186,9 +202,22 @@ function createTable {
   metaData="Field$sepType$sepKey"
   temp=""
 
+  # Array to store column names
+  declare -a columnNames
+
   for ((counter = 1; counter <= colsNum; counter++)); do
     echo -e "Name of Column No.$counter: \c"
     read -r colName
+
+    # Check if column name already exists
+    if [[ " ${columnNames[@]} " =~ " $colName " ]]; then
+      echo "Column with name '$colName' already exists. Please choose a different name."
+      counter=$((counter - 1))  # Decrement counter to re-enter column name
+      continue
+    fi
+
+    # Add column name to array
+    columnNames+=("$colName")
 
     echo -e "Type of Column $colName: "
     select var in "int" "str"; do
@@ -237,54 +266,76 @@ function createTable {
   tablesMenu
 }
 
+
+
+
 function insert {
   echo -e "Table Name: \c"
   read tableName
   if ! [[ -f $tableName ]]; then
-    echo "Table $tableName isn't existed ,choose another Table"
+    echo "Table $tableName doesn't exist. Please choose another table."
     tablesMenu
+    return
   fi
-  colsNum=`awk 'END{print NR}' .$tableName`
+
+  colsNum=$(awk 'END{print NR}' ".$tableName")
   sep="|"
   rSep="\n"
   for (( i = 2; i <= $colsNum; i++ )); do
-    colName=$(awk 'BEGIN{FS="|"}{ if(NR=='$i') print $1}' .$tableName)
-    colType=$( awk 'BEGIN{FS="|"}{if(NR=='$i') print $2}' .$tableName)
-    colKey=$( awk 'BEGIN{FS="|"}{if(NR=='$i') print $3}' .$tableName)
+    colName=$(awk 'BEGIN{FS="|"}{ if(NR=='$i') print $1}' ".$tableName")
+    colType=$(awk 'BEGIN{FS="|"}{ if(NR=='$i') print $2}' ".$tableName")
+    colKey=$(awk 'BEGIN{FS="|"}{ if(NR=='$i') print $3}' ".$tableName")
     echo -e "$colName ($colType) = \c"
-    read data
+    read -r data
 
     # Validate Input
+    if [[ -z "${data}" || "${data}" =~ ^[[:space:]]+$ ]]; then
+      echo "Invalid input. Value cannot be empty or spaces-only. Please enter a valid value."
+      i=$((i - 1))  # Decrement counter to re-enter column value
+      continue
+    fi
+
     if [[ $colType == "int" ]]; then
       while ! [[ $data =~ ^[0-9]*$ ]]; do
-        echo -e "invalid DataType !!"
+        echo "Invalid input. $colName must be an integer."
         echo -e "$colName ($colType) = \c"
-        read data
+        read -r data
       done
+    elif [[ $colType == "str" ]]; then
+      # Ensure string value doesn't start with a number
+      while [[ $data =~ ^[0-9] ]]; do
+        echo "Invalid input. $colName must not start with a number."
+        echo -e "$colName ($colType) = \c"
+        read -r data
+      done
+    else
+      echo "Invalid column type $colType. Only 'int' and 'str' (or 'string') are allowed."
+      tablesMenu
+      return
     fi
 
     if [[ $colKey == "PK" ]]; then
       while [[ true ]]; do
-        if [[ $data =~ ^[`awk 'BEGIN{FS="|" ; ORS=" "}{if(NR != 1)print $(('$i'-1))}' $tableName`]$ ]]; then
-          echo -e "primary key must be unique !"
+        if grep -q "^${data}${sep}" "${tableName}"; then
+          echo "Primary key must be unique!"
         else
-          break;
+          break
         fi
         echo -e "$colName ($colType) = \c"
-        read data
+        read -r data
       done
     fi
 
-    #Set row
+    # Set row
     if [[ $i == $colsNum ]]; then
       row=$row$data$rSep
     else
       row=$row$data$sep
     fi
   done
-  echo -e $row"\c" >> $tableName
-  if [[ $? == 0 ]]
-  then
+
+  echo -e "$row\c" >> "$tableName"
+  if [[ $? == 0 ]]; then
     echo "Data Inserted Successfully"
   else
     echo "Error Inserting Data into Table $tableName"
@@ -292,6 +343,10 @@ function insert {
   row=""
   tablesMenu
 }
+
+
+
+
 
 function dropTable {
   echo -e "Enter Table Name: \c"
@@ -410,51 +465,47 @@ function updateTable {
   # Create a temporary file to store the updated table  
   tmpfile=$(mktemp)
   
+  # Get column names from the header of the table
+  header=$(awk 'NR==1' "$tableName")
+  IFS='|' read -ra columns <<< "$header"
+  
   # Loop to update columns
   while true; do
     # Prompt user to select the column to update
     echo "Select the column to update:"
-    echo "1. ID"
-    echo "2. Name"
-    echo "3. Age"
+    for ((i = 0; i < ${#columns[@]}; i++)); do
+      echo "$((i + 1)). ${columns[i]}"
+    done
+    echo "$((i + 1)). Done"
     read -r choice
     
-    # Check the user's choice and set the column variable accordingly
-    case $choice in
-      1) column="ID";;
-      2) column="Name";;
-      3) column="Age";;
-      *) echo "Invalid choice"; tablesMenu; return;;
-    esac
-    
-    # Prompt for the new value for the selected column
-    echo -e "Enter new value for $column: \c"
-    read -r newValue
-    
-    # Update the table
-    awk -v pKey="$primaryKey" -v pKeyValue="$primaryKeyValue" -v col="$column" -v newVal="$newValue" -F "|" '
-      BEGIN { OFS = FS }
-      {
-        if ($1 == pKeyValue) {
-          if (col == "ID") {
-            $1 = newVal
-          } else if (col == "Name") {
-            $2 = newVal
-          } else if (col == "Age") {
-            $3 = newVal
-          }
-        }
-        print $0
-      }
-    ' "$tableName" > "$tmpfile" && mv "$tmpfile" "$tableName"
-    
-    # Ask user if they want to update more values
-    echo -e "Do you want to update more values in this row? (1: Yes, 2: No): \c"
-    read -r updateMore
-    
-    # If the user chooses not to update more values, exit the loop
-    if [ "$updateMore" = "2" ]; then
+    # Check if the choice is "Done", if so, exit the loop
+    if [ "$choice" -eq $((i + 1)) ]; then
       break
+    fi
+    
+    # Check if the choice is within the range of column indices
+    if [ "$choice" -ge 1 ] && [ "$choice" -le "${#columns[@]}" ]; then
+      # Extract the column name corresponding to the choice
+      column="${columns[$((choice - 1))]}"
+      
+      # Prompt for the new value for the selected column
+      echo -e "Enter new value for $column: \c"
+      read -r newValue
+      
+      # Update the table
+      awk -v pKey="$primaryKey" -v pKeyValue="$primaryKeyValue" -v colIndex="$choice" -v newVal="$newValue" -F "|" '
+        BEGIN { OFS = FS }
+        {
+          if ($1 == pKeyValue) {
+            $colIndex = newVal
+          }
+          print $0
+        }
+      ' "$tableName" > "$tmpfile" && mv "$tmpfile" "$tableName"
+      
+    else
+      echo "Invalid choice"
     fi
   done
   
@@ -465,6 +516,8 @@ function updateTable {
   
   tablesMenu
 }
+
+
 
 
 
