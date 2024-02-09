@@ -1,4 +1,4 @@
 Field
 id|int|PK
-name|str|
+name|1|
 age|int|

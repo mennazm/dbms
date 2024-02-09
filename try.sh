@@ -1,25 +1,25 @@
 #!/bin/bash
 
+#!/bin/bash
 shopt -s extglob
 export LC_COLLATE=C
 
 DBMS_PATH="./DBMS"
 ERROR_LOG="./.error.log"
-INPUT="/tmp/input.$$"  # Define INPUT variable
 
 mkdir "$DBMS_PATH" 2>> "$ERROR_LOG"
 
 function mainMenu {
-  dialog --backtitle "Main Menu" \
-         --menu "Choose an option:" 15 50 5 \
-         1 "Use DB" \
-         2 "Create DB" \
-         3 "Drop DB" \
-         4 "Show DBs" \
-         5 "Exit" 2>"$INPUT"
-  menu_choice=$(<"$INPUT")
-
-  case $menu_choice in
+  echo -e "\n+---------Main Menu-------------+"
+  echo "| 1. Use DB                     |"
+  echo "| 2. Create DB                  |"
+  echo "| 3. Drop DB                    |"
+  echo "| 4. Show DBs                   |"
+  echo "| 5. Exit                       |"
+  echo "+-------------------------------+"
+  echo -e "Enter Choice: \c"
+  read -r ch
+  case $ch in
     1) useDB ;;
     2) createDB ;;
     3) dropDB ;;
@@ -28,83 +28,6 @@ function mainMenu {
     *) echo "Not Valid" ; mainMenu ;;
   esac
 }
-
-function useDB {
-  dialog --backtitle "Use DB" \
-         --inputbox "Enter Database Name:" 8 40 2>"$INPUT"
-  dbName=$(<"$INPUT")
-  dbName=$(echo "$dbName" | tr '[:upper:]' '[:lower:]')
-
-  if [ -d "$DBMS_PATH/$dbName" ]; then
-    cd "$DBMS_PATH/$dbName" 2>> "$ERROR_LOG"
-    dialog --backtitle "Success" \
-           --msgbox "You are using Database $dbName" 8 40
-    tablesMenu
-  else
-    dialog --backtitle "Error" \
-           --msgbox "Database $dbName wasn't found" 8 40
-    mainMenu
-  fi
-}
-
-function createDB {
-  dialog --backtitle "Create DB" \
-         --inputbox "Enter Database Name:" 8 40 2>"$INPUT"
-  dbName=$(<"$INPUT")
-
-  # Validate database name
-  if [[ ! "$dbName" =~ ^[a-zA-Z_][a-zA-Z0-9_]*$ || "$dbName" =~ ^[0-9] ]]; then
-    dialog --backtitle "Error" \
-           --msgbox "Invalid Database Name. Use only alphanumeric characters and underscores. It should not start with a number." 8 60
-    mainMenu
-    return
-  fi
-
-  dbPath="$DBMS_PATH/$dbName"
-
-  # Check if the database already exists
-  if [ -d "$dbPath" ]; then
-    dialog --backtitle "Error" \
-           --msgbox "Database $dbName already exists." 8 40
-    mainMenu
-    return
-  fi
-
-  mkdir "$dbPath"
-  if [ $? -eq 0 ]; then
-    dialog --backtitle "Success" \
-           --msgbox "Database Created Successfully" 8 40
-  else
-    dialog --backtitle "Error" \
-           --msgbox "Error Creating Database $dbName" 8 40
-  fi
-  mainMenu
-}
-
-function dropDB {
-  dialog --backtitle "Drop DB" \
-         --inputbox "Enter Database Name:" 8 40 2>"$INPUT"
-  dbName=$(<"$INPUT")
-  dbName=$(echo "$dbName" | tr '[:upper:]' '[:lower:]')
-
-  rm -r "$DBMS_PATH/$dbName"
-  if [ $? -eq 0 ]; then
-    dialog --backtitle "Success" \
-           --msgbox "Database Dropped Successfully" 8 40
-  else
-    dialog --backtitle "Error" \
-           --msgbox "Error Dropping Database $dbName" 8 40
-  fi
-  mainMenu
-}
-
-function showDBs {
-  dialog --backtitle "Show DBs" \
-         --msgbox "$(ls "$DBMS_PATH")" 20 40
-  mainMenu
-}
-
-
 
 function useDB {
   echo -e "Enter Database Name: "
@@ -128,11 +51,11 @@ function createDB {
   read -r dbName
 
   # Validate database name
-    if [[ ! "$dbName" =~ ^[a-zA-Z_][a-zA-Z0-9_]*$ || "$dbName" =~ ^[0-9] ]]; then
-      echo "Invalid Database Name. Use only alphanumeric characters and underscores. It should not start with a number."
-      mainMenu
-      return
-    fi
+if [[ ! "$dbName" =~ ^[a-zA-Z_][a-zA-Z0-9_]*$ || "$dbName" =~ ^[0-9] ]]; then
+  echo "Invalid Database Name. Use only alphanumeric characters and underscores. It should not start with a number."
+  mainMenu
+  return
+fi
 
   dbPath="$DBMS_PATH/$dbName"
 
@@ -174,30 +97,31 @@ function showDBs {
 }
 
 function tablesMenu {
-  dialog --backtitle "Tables Menu" \
-         --menu "Choose an option:" 20 50 10 \
-         1 "Show Existing Tables" \
-         2 "Create New Table" \
-         3 "Insert Into Table" \
-         4 "Delete From Table" \
-         5 "Select All From Table" \
-         6 "Select Data From Table" \
-         7 "Update Table" \
-         8 "Drop Table" \
-         9 "Back To Main Menu" \
-         10 "Exit" 2>"$INPUT"
-  menu_choice=$(<"$INPUT")
+  echo -e "\n+--------Tables Menu------------+"
+  echo "| 1. Show Existing Tables       |"
+  echo "| 2. Create New Table           |"
+  echo "| 3. Insert Into Table          |"
+  echo "| 4. deleteFromTable            |"
+  echo "| 5. selectAllFromTable         |"
+  echo "| 6. selectDataFromTable        |"
+  echo "| 7. updateTable                |"
+  echo "| 8. Drop Table                 |"   
+  echo "| 9. Back To Main Menu          |"
+  echo "|10. Exit                       |"
+  echo "+-------------------------------+"
+  echo -e "Enter Choice: \c"
+  read -r choice
 
-  case $menu_choice in
+  case $choice in
     1) ls .; tablesMenu ;;
     2) createTable ;;
     3) insert ;;
-    4) deleteFromTable ;;
+    4) deleteFromTable;;
     5) selectAllFromTable ;;
     6) selectDataFromTable ;;
-    7) updateTable ;;
-    8) dropTable ;;
-    9) mainMenu ;;
+    7) updateTable ;; 
+    8) dropTable;;
+    9) clear; cd ../.. 2>> "$ERROR_LOG"; mainMenu ;;
     10) exit ;;
     *) echo "Invalid Choice"; tablesMenu ;;
   esac
@@ -508,9 +432,6 @@ function selectDataFromTable {
   tablesMenu
 }
 
-
-
-
 function updateTable {
   echo -e "Enter Table Name: \c"
   read -r tableName
@@ -642,6 +563,10 @@ function updateTable {
   tablesMenu
 }
 
+
+
+
+
+
 # Start the script
 mainMenu
-
