@@ -19,3 +19,7 @@ To add a GUI to the Simple DBMS project, we can use a simple GUI toolkit for Bas
 
 Install Dialog:
 sudo apt-get install dialog
+
+Run the Script:
+./fdbms.sh
+Execute the modified script, and you should see GUI menus instead of text-based ones.
