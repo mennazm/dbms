@@ -272,8 +272,13 @@ function createTable {
     return
   fi
 
-  echo -e "Number of Columns:"
-  read -r colsNum
+ echo -e "Number of Columns:"
+while ! [[ $colsNum =~ ^[0-9]+$ ]]; do
+    echo "Invalid input. Number of columns must be an integer."
+    echo -e "Number of Columns: \c"
+    read -r colsNum
+done
+
 
   sep="|"
   rSep="\n"
@@ -586,7 +591,7 @@ function updateTable {
       fi
 
  
-      # Loop until a valid value is provided
+ 
       while true; do
         # Prompt for the new value for the selected column
         echo -e "Enter new value for $column: \c"

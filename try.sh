@@ -196,8 +196,14 @@ function createTable {
     return
   fi
 
-  echo -e "Number of Columns:"
-  read -r colsNum
+echo -e "Number of Columns:"
+while ! [[ $colsNum =~ ^[0-9]+$ ]]; do
+    echo "Invalid input. Number of columns must be an integer."
+    echo -e "Number of Columns: \c"
+    read -r colsNum
+done
+
+ 
 
   sep="|"
   rSep="\n"
@@ -464,12 +470,12 @@ function updateTable {
     return
   fi
   
-  # Loop to update columns
+  
   while true; do
-    # Create a temporary file to store the updated table  
+    
     tmpfile=$(mktemp)
     
-    # Get column names and types from the header of the table
+   
     header=$(awk 'NR==1' "$tableName")
     IFS='|' read -ra columns <<< "$header"
     
@@ -536,11 +542,11 @@ function updateTable {
           return
         fi
 
-        # If the input passes all validations, break out of the loop
+       
         break
       done
 
-      # Update the table
+      
       awk -v pKey="$primaryKey" -v pKeyValue="$primaryKeyValue" -v colIndex="$choice" -v newVal="$data" -F "|" '
         BEGIN { OFS = FS }
         {
@@ -562,10 +568,6 @@ function updateTable {
   
   tablesMenu
 }
-
-
-
-
 
 
 # Start the script
